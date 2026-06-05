@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: badminton-signaling
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: python ws_bridge.py
