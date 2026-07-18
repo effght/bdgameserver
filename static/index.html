@@ -1,0 +1,473 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShuttleSync Badminton Simulator</title>
+  <meta name="description" content="A browser-based badminton simulator with mobile motion control, rally stats, AI styles, and optional special-shot gameplay." />
+  <style>
+    :root {
+      --ink: #f6f4ec;
+      --muted: #b8c0b6;
+      --court: #176d45;
+      --court-deep: #0e3c2a;
+      --line: rgba(248, 246, 232, 0.86);
+      --lime: #e6ff4d;
+      --gold: #f4c95d;
+      --blue: #48b8ff;
+      --red: #ff4f42;
+      --panel: rgba(7, 13, 11, 0.76);
+      --border: rgba(246, 244, 236, 0.16);
+      --shadow: rgba(0, 0, 0, 0.4);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 18% 12%, rgba(230, 255, 77, 0.16), transparent 26%),
+        radial-gradient(circle at 78% 18%, rgba(72, 184, 255, 0.14), transparent 28%),
+        linear-gradient(155deg, #050908 0%, #0d261a 48%, #070b09 100%);
+      font-family: "Aptos", "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .nav {
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px clamp(18px, 4vw, 58px);
+      background: linear-gradient(180deg, rgba(4, 8, 7, 0.9), rgba(4, 8, 7, 0.2));
+      backdrop-filter: blur(10px);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 900;
+      letter-spacing: 0.02em;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background:
+        linear-gradient(135deg, transparent 43%, var(--line) 44%, var(--line) 54%, transparent 55%),
+        radial-gradient(circle at 68% 28%, var(--lime) 0 16%, transparent 17%),
+        var(--court);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 20px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .nav-links a:hover { color: var(--ink); }
+
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: grid;
+      align-items: end;
+      padding: 116px clamp(18px, 5vw, 76px) 62px;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: -23vh -2vw auto auto;
+      width: min(62vw, 720px);
+      aspect-ratio: 576 / 1200;
+      background:
+        linear-gradient(180deg, var(--line) 0%, var(--line) 35.25%, transparent 35.25%, transparent 64.75%, var(--line) 64.75%, var(--line) 100%) 50% 0 / 4px 100% no-repeat,
+        linear-gradient(var(--line), var(--line)) 0 50% / 100% 4px no-repeat,
+        linear-gradient(var(--line), var(--line)) 0 35.25% / 100% 4px no-repeat,
+        linear-gradient(var(--line), var(--line)) 0 64.75% / 100% 4px no-repeat,
+        linear-gradient(var(--line), var(--line)) 0 3.17% / 100% 4px no-repeat,
+        linear-gradient(var(--line), var(--line)) 0 96.83% / 100% 4px no-repeat,
+        linear-gradient(var(--line), var(--line)) 3.99% 0 / 4px 100% no-repeat,
+        linear-gradient(var(--line), var(--line)) 96.01% 0 / 4px 100% no-repeat,
+        linear-gradient(160deg, var(--court) 0%, var(--court-deep) 100%);
+      border: 5px solid var(--line);
+      box-shadow: 0 42px 120px var(--shadow);
+      transform: perspective(920px) rotateX(63deg) rotateZ(-10deg) translateY(-82px);
+      transform-origin: center;
+      opacity: 0.72;
+      z-index: -2;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      left: 10vw;
+      top: 21vh;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow:
+        120px 58px 0 -5px rgba(255, 255, 255, 0.72),
+        238px 104px 0 -7px rgba(255, 255, 255, 0.46),
+        360px 132px 0 -9px rgba(255, 255, 255, 0.22),
+        0 0 34px rgba(255, 255, 255, 0.9);
+      animation: shuttle-path 4.2s ease-in-out infinite;
+      z-index: -1;
+    }
+
+    @keyframes shuttle-path {
+      0%, 100% { transform: translate3d(0, 18px, 0); opacity: 0.45; }
+      45% { transform: translate3d(26vw, -32px, 0); opacity: 1; }
+      70% { transform: translate3d(42vw, 26px, 0); opacity: 0.8; }
+    }
+
+    .hero-content { max-width: 780px; }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #101812;
+      background: var(--lime);
+      padding: 6px 11px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    h1 {
+      margin: 24px 0 16px;
+      max-width: 780px;
+      font-size: clamp(46px, 8vw, 112px);
+      line-height: 0.9;
+      letter-spacing: -0.05em;
+    }
+
+    .lead {
+      max-width: 680px;
+      color: #d8dfd5;
+      font-size: clamp(18px, 2.1vw, 24px);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 30px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 50px;
+      padding: 13px 20px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-weight: 900;
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+      transition: transform 160ms ease, background 160ms ease;
+    }
+
+    .btn.primary {
+      color: #101812;
+      background: var(--lime);
+      border-color: transparent;
+    }
+
+    .btn:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.13); }
+    .btn.primary:hover { background: #f0ff78; }
+
+    section { padding: 86px clamp(18px, 5vw, 76px); }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(32px, 4vw, 56px);
+      line-height: 1.02;
+      letter-spacing: -0.035em;
+    }
+
+    .section-note {
+      max-width: 560px;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      min-height: 220px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 22px;
+      background: rgba(255, 255, 255, 0.06);
+      box-shadow: 0 22px 56px rgba(0, 0, 0, 0.2);
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 20px;
+    }
+
+    .card p { margin: 0; color: var(--muted); }
+
+    .strip {
+      display: flex;
+      height: 5px;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+
+    .strip span { flex: 1; }
+    .green { background: #42e47a; }
+    .red { background: var(--red); }
+    .blue { background: var(--blue); }
+    .gold { background: var(--gold); }
+    .purple { background: #a64dff; }
+
+    .launch-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 0.55fr);
+      gap: 18px;
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--panel);
+      padding: 24px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
+    }
+
+    .launch-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .quick-list {
+      display: grid;
+      gap: 12px;
+      margin: 18px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .quick-list li {
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      padding-top: 12px;
+      color: #d5dcd2;
+    }
+
+    .quick-list b {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+
+    code {
+      color: #fff2bd;
+      background: rgba(244, 201, 93, 0.14);
+      border: 1px solid rgba(244, 201, 93, 0.22);
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: "Cascadia Mono", "Consolas", monospace;
+      font-size: 0.92em;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .step {
+      border-left: 4px solid var(--lime);
+      padding-left: 18px;
+    }
+
+    .step span {
+      display: block;
+      color: var(--lime);
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
+
+    .step p { margin: 0; color: #dce4db; }
+
+    .footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 34px clamp(18px, 5vw, 76px);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.22);
+    }
+
+    @media (max-width: 900px) {
+      .nav-links { display: none; }
+      .hero { min-height: 92vh; }
+      .hero::before {
+        width: min(88vw, 520px);
+        right: -160px;
+        opacity: 0.54;
+      }
+      .section-head { display: block; }
+      .section-note { margin-top: 12px; }
+      .cards,
+      .launch-grid,
+      .launch-buttons,
+      .steps { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 560px) {
+      .actions .btn,
+      .launch-buttons .btn { width: 100%; }
+      section { padding-top: 64px; padding-bottom: 64px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav" aria-label="Primary navigation">
+    <a class="brand" href="#top" aria-label="ShuttleSync home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>ShuttleSync</span>
+    </a>
+    <div class="nav-links">
+      <a href="#launch">Launch</a>
+      <a href="#features">Features</a>
+      <a href="#setup">Setup</a>
+    </div>
+  </nav>
+
+  <header class="hero" id="top">
+    <div class="hero-content">
+      <span class="eyebrow">Browser badminton simulator</span>
+      <h1>Train rallies, read shots, and play with motion control.</h1>
+      <p class="lead">ShuttleSync is a lightweight web badminton simulator built around phone-based swing input, rally stats, AI personalities, special skills, and QR-based controller pairing.</p>
+      <div class="actions">
+        <a class="btn primary" href="/player">Open Player Court</a>
+        <a class="btn" href="/hit">Open Phone Controller</a>
+        <a class="btn" href="#setup">How pairing works</a>
+      </div>
+    </div>
+  </header>
+
+  <section id="launch" aria-labelledby="launch-title">
+    <div class="section-head">
+      <h2 id="launch-title">Start A Rally</h2>
+      <p class="section-note">Open the court on your computer, pair your phone as the racket, then swing into rallies against AI personalities.</p>
+    </div>
+    <div class="launch-grid">
+      <div class="panel">
+        <strong>Two screens, one rally</strong>
+        <p>The computer shows the badminton court, AI opponent, score, stamina, and landing feedback. Your phone becomes the motion racket for aiming, lifting, smashing, and special shots.</p>
+        <div class="launch-buttons">
+          <a class="btn primary" href="/player">Player Court</a>
+          <a class="btn" href="/hit">Phone Controller</a>
+        </div>
+      </div>
+      <aside class="panel">
+        <strong>What you need</strong>
+        <ul class="quick-list">
+          <li><b>A computer screen</b>Run the player court and keep the rally view open.</li>
+          <li><b>A phone controller</b>Scan the QR code, enable sensors, and calibrate the racket face.</li>
+          <li><b>Room pairing</b>The QR code keeps your phone connected to the correct court.</li>
+          <li><b>Optional powers</b>Turn on special skills for arcade-style magic shots.</li>
+        </ul>
+      </aside>
+    </div>
+  </section>
+
+  <section id="features" aria-labelledby="features-title">
+    <div class="section-head">
+      <h2 id="features-title">Current Features</h2>
+      <p class="section-note">Built for motion-controlled badminton practice and playful rally experiments.</p>
+    </div>
+    <div class="cards">
+      <article class="card">
+        <div class="strip"><span class="green"></span><span class="blue"></span><span class="gold"></span></div>
+        <strong>Mobile Swing Input</strong>
+        <p>Your phone sends swing timing, face angle, ready prompts, and special-shot commands directly to the court view.</p>
+      </article>
+      <article class="card">
+        <div class="strip"><span class="red"></span><span class="gold"></span><span class="green"></span></div>
+        <strong>Rally Simulation</strong>
+        <p>Rally mode includes scoring, serving flow, stamina, shot stats, landing maps, AI positioning, and controller-ready prompts.</p>
+      </article>
+      <article class="card">
+        <div class="strip"><span class="purple"></span><span class="blue"></span><span class="red"></span></div>
+        <strong>AI Personalities</strong>
+        <p>Different AI styles can bias shot choice, movement, front-court behavior, and special-skill usage.</p>
+      </article>
+      <article class="card">
+        <div class="strip"><span class="blue"></span><span class="purple"></span><span class="gold"></span></div>
+        <strong>Special Skills</strong>
+        <p>Optional skills include power shots, redirects, time effects, invisible shots, forced responses, countdown states, and more.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="setup" aria-labelledby="setup-title">
+    <div class="section-head">
+      <h2 id="setup-title">Pairing Flow</h2>
+      <p class="section-note">Pairing is designed to be simple: open the court, scan the code, calibrate, and play.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <span>1. Open the player court</span>
+        <p>Go to <code>/player</code>. The page creates or restores a room id and shows a QR code for the controller.</p>
+      </div>
+      <div class="step">
+        <span>2. Scan the QR code</span>
+        <p>Your phone opens <code>/hit</code> with the same room id and a WebSocket URL pointing to <code>/ws</code>.</p>
+      </div>
+      <div class="step">
+        <span>3. Calibrate and play</span>
+        <p>Enable sensors, calibrate the phone face, connect the controller, then start swinging or use rally-ready prompts.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span>ShuttleSync Badminton Simulator</span>
+    <span>Browser court, phone motion racket, rally stats, AI opponents, and special shots.</span>
+  </footer>
+</body>
+</html>

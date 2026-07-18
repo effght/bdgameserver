@@ -1,0 +1,1947 @@
+﻿<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Badminton WebRTC Hit Controller</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --line: #273142;
+      --text: #e6edf3;
+      --muted: #9fb0c3;
+      --accent: #ffd54a;
+      --accent-2: #58a6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 14px;
+      background: linear-gradient(180deg, #0b0f14 0%, var(--bg) 100%);
+      color: var(--text);
+      font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .app { max-width: 720px; margin: 0 auto; display: grid; gap: 12px; }
+    .card { background: rgba(22, 27, 34, 0.96); border: 1px solid var(--line); border-radius: 18px; padding: 14px; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.26); }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: 24px; }
+    h2 { font-size: 15px; color: var(--muted); margin-bottom: 10px; }
+    .hero { display: grid; gap: 8px; }
+    .hero p { color: var(--muted); line-height: 1.5; font-size: 14px; }
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 14px 12px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: var(--accent-2); color: #071221; }
+    .btn-warn { background: var(--accent); color: #2a2100; }
+    .btn-hit {
+      background: linear-gradient(180deg, #ffd54a 0%, #ffb300 100%);
+      color: #201700;
+      min-height: 148px;
+      margin-top: 40px;
+      padding-top: 22px;
+      padding-bottom: 22px;
+      font-size: 30px;
+      letter-spacing: 1px;
+      touch-action: none;
+      grid-column: 1 / -1;
+      border-radius: 20px;
+      box-shadow: 0 12px 28px rgba(255, 179, 0, 0.28);
+    }
+    .btn-special {
+      background: linear-gradient(180deg, #ff6b35 0%, #d83b16 100%);
+      color: #fff8e8;
+      min-height: 104px;
+      font-size: 24px;
+      letter-spacing: 0.5px;
+      touch-action: none;
+      grid-column: 1 / -1;
+      border-radius: 18px;
+      box-shadow: 0 10px 24px rgba(255, 87, 34, 0.22);
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .field { display: grid; gap: 6px; }
+    .field label { color: var(--muted); font-size: 12px; }
+    input { width: 100%; border-radius: 12px; border: 1px solid var(--line); background: #0f141c; color: var(--text); padding: 11px 12px; font-size: 14px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; line-height: 1.45; }
+    .scroll-box { max-height: 180px; overflow-y: auto; }
+    .pill-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .pill { background: #0f141c; border: 1px solid var(--line); border-radius: 14px; padding: 10px; text-align: center; }
+    .pill .label { color: var(--muted); font-size: 11px; margin-bottom: 6px; }
+    .pill .value { font-size: 18px; font-weight: 700; }
+    .check-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .check-row input {
+      width: 22px;
+      height: 22px;
+      accent-color: var(--accent);
+    }
+    @media (max-width: 560px) {
+      .actions, .grid, .pill-row { grid-template-columns: 1fr; }
+      .btn-hit {
+        min-height: 180px;
+        margin-top: 46px;
+        padding-top: 28px;
+        padding-bottom: 28px;
+        font-size: 34px;
+      }
+      .btn-special {
+        min-height: 116px;
+        font-size: 25px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="card hero">
+      <h1>手機擊球控制器 WebRTC</h1>
+      <p>WebSocket 只用來牽線，擊球封包會透過 WebRTC DataChannel 直接送到模擬器。</p>
+    </div>
+
+    <div class="card">
+      <div class="actions">
+        <button id="btnStart" class="btn-primary">啟用感測器</button>
+        <button id="btnCal" class="btn-warn" disabled>準備 / 校正拍面</button>
+        <button id="btnHit" class="btn-hit" disabled>打擊</button>
+        <button id="btnSpecial" class="btn-special" disabled>特殊技</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>連線設定</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="wsUrl">Signaling WebSocket URL</label>
+          <input id="wsUrl" type="text" value="" />
+        </div>
+        <div class="field">
+          <label for="roomId">Channel ID</label>
+          <input id="roomId" type="text" value="" placeholder="Scan QRCode or paste channel id" />
+        </div>
+        <div class="field">
+          <label>前取樣 / 後取樣 (ms)</label>
+          <div class="grid">
+            <input id="preMs" type="number" value="150" min="0" step="10" />
+            <input id="postMs" type="number" value="30" min="0" step="10" />
+          </div>
+        </div>
+      </div>
+      <div class="grid" style="margin-top:10px;">
+        <div class="field">
+          <label for="meff">m_eff (kg)</label>
+          <input id="meff" type="number" value="0.20" min="0" step="0.05" />
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button id="btnWs" class="btn-primary" style="width:100%;">Connect WebRTC</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>即時狀態</h2>
+      <div class="pill-row">
+        <div class="pill"><div class="label">Dir X</div><div class="value" id="pitchVal">-</div></div>
+        <div class="pill"><div class="label">Dir Y</div><div class="value" id="yawVal">-</div></div>
+        <div class="pill"><div class="label">Dir Z</div><div class="value" id="rollVal">-</div></div>
+        <div class="pill"><div class="label">Peak Acc</div><div class="value" id="accVal">-</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>校正診斷</h2>
+      <div class="pill-row">
+        <div class="pill"><div class="label">Cal</div><div class="value" id="calStateVal">-</div></div>
+        <div class="pill"><div class="label">Rel Pitch</div><div class="value" id="relPitchVal">-</div></div>
+        <div class="pill"><div class="label">Rel Yaw</div><div class="value" id="relYawVal">-</div></div>
+        <div class="pill"><div class="label">Rel Roll</div><div class="value" id="relRollVal">-</div></div>
+      </div>
+      <div class="pill-row" style="margin-top:10px;">
+        <div class="pill"><div class="label">Face X</div><div class="value" id="faceXVal">-</div></div>
+        <div class="pill"><div class="label">Face Y</div><div class="value" id="faceYVal">-</div></div>
+        <div class="pill"><div class="label">Face Z</div><div class="value" id="faceZVal">-</div></div>
+        <div class="pill"><div class="label">Drift</div><div class="value" id="driftVal">-</div></div>
+      </div>
+      <div class="pill-row" style="margin-top:10px;">
+        <div class="pill"><div class="label">Hit Count</div><div class="value" id="yawHitCountVal">0</div></div>
+        <div class="pill"><div class="label">Yaw Before Cal</div><div class="value" id="yawBeforeCalVal">-</div></div>
+        <div class="pill"><div class="label">Drift / Hit</div><div class="value" id="yawDriftPerHitVal">-</div></div>
+        <div class="pill"><div class="label">Fix / Hit</div><div class="value" id="yawFixPerHitVal">-</div></div>
+      </div>
+      <label class="check-row" style="margin-top:10px;">
+        <span>每拍 yaw 自動校正</span>
+        <input id="autoYawPerHit" type="checkbox" checked />
+      </label>
+      <div class="grid" style="margin-top:10px;">
+        <div class="field">
+          <label for="yawCorrectionMode">Yaw 修正模式</label>
+          <select id="yawCorrectionMode" style="width:100%; border-radius:12px; border:1px solid var(--line); background:#0f141c; color:var(--text); padding:11px 12px; font-size:14px;">
+            <option value="auto" selected>自動偵測修正值</option>
+            <option value="fixed">固定修正值</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fixedYawFixPerHit">固定 Fix / Hit (deg)</label>
+          <input id="fixedYawFixPerHit" type="number" value="0" step="0.01" min="-3" max="3" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>磁力修正</h2>
+      <label class="check-row" style="margin-bottom:10px;">
+        <span>磁力 yaw 輔助</span>
+        <input id="magYawAssist" type="checkbox" />
+      </label>
+      <div class="pill-row">
+        <div class="pill"><div class="label">Mag</div><div class="value" id="magStateVal">-</div></div>
+        <div class="pill"><div class="label">Head</div><div class="value" id="magHeadingVal">-</div></div>
+        <div class="pill"><div class="label">Yaw Fix</div><div class="value" id="magYawFixVal">-</div></div>
+        <div class="pill"><div class="label">Stable</div><div class="value" id="magStableVal">-</div></div>
+      </div>
+      <div class="grid" style="margin-top:10px;">
+        <button id="btnYawMinus" class="btn-warn" disabled>Yaw -1</button>
+        <button id="btnYawPlus" class="btn-warn" disabled>Yaw +1</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>系統狀態</h2>
+      <div id="status" class="mono">Ready</div>
+      <div id="wsStatus" class="mono" style="margin-top:8px;">WebRTC disconnected</div>
+    </div>
+
+    <div class="card">
+      <h2>觸覺回饋</h2>
+      <label class="check-row">
+        <span>擊球按鈕震動</span>
+        <input id="vibrateHit" type="checkbox" checked />
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>本次打擊</h2>
+      <div class="pill-row">
+        <div class="pill"><div class="label">Hit Dir X</div><div class="value" id="hitPitchVal">-</div></div>
+        <div class="pill"><div class="label">Hit Dir Y</div><div class="value" id="hitYawVal">-</div></div>
+        <div class="pill"><div class="label">Hit Dir Z</div><div class="value" id="hitRollVal">-</div></div>
+        <div class="pill"><div class="label">Hit Power</div><div class="value" id="hitPowerVal">-</div></div>
+      </div>
+      <div class="pill-row" style="margin-top:10px;">
+        <div class="pill"><div class="label">Face Pitch</div><div class="value" id="hitFacePitchVal">-</div></div>
+        <div class="pill"><div class="label">Face Yaw</div><div class="value" id="hitFaceYawVal">-</div></div>
+        <div class="pill"><div class="label">Peak Acc</div><div class="value" id="hitPeakAccVal">-</div></div>
+        <div class="pill"><div class="label">Impulse</div><div class="value" id="hitImpulseVal">-</div></div>
+      </div>
+      <div class="pill-row" style="margin-top:10px;">
+        <div class="pill"><div class="label">Power Norm</div><div class="value" id="hitPowerNormVal">-</div></div>
+        <div class="pill"><div class="label">Power Boost</div><div class="value" id="hitPowerBoostVal">-</div></div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  import * as THREE from "https://unpkg.com/three@0.164.1/build/three.module.js";
+
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $("status");
+  const wsStatusEl = $("wsStatus");
+  const btnStart = $("btnStart");
+  const btnCal = $("btnCal");
+  const btnHit = $("btnHit");
+  const btnSpecial = $("btnSpecial");
+  const btnYawMinus = $("btnYawMinus");
+  const btnYawPlus = $("btnYawPlus");
+  const btnWs = $("btnWs");
+  const wsUrlEl = $("wsUrl");
+  const roomIdEl = $("roomId");
+  const preMsEl = $("preMs");
+  const postMsEl = $("postMs");
+  const meffEl = $("meff");
+  const pitchVal = $("pitchVal");
+  const yawVal = $("yawVal");
+  const rollVal = $("rollVal");
+  const accVal = $("accVal");
+  const calStateVal = $("calStateVal");
+  const relPitchVal = $("relPitchVal");
+  const relYawVal = $("relYawVal");
+  const relRollVal = $("relRollVal");
+  const faceXVal = $("faceXVal");
+  const faceYVal = $("faceYVal");
+  const faceZVal = $("faceZVal");
+  const driftVal = $("driftVal");
+  const yawHitCountVal = $("yawHitCountVal");
+  const yawBeforeCalVal = $("yawBeforeCalVal");
+  const yawDriftPerHitVal = $("yawDriftPerHitVal");
+  const yawFixPerHitVal = $("yawFixPerHitVal");
+  const autoYawPerHitEl = $("autoYawPerHit");
+  const yawCorrectionModeEl = $("yawCorrectionMode");
+  const fixedYawFixPerHitEl = $("fixedYawFixPerHit");
+  const magYawAssistEl = $("magYawAssist");
+  const magStateVal = $("magStateVal");
+  const magHeadingVal = $("magHeadingVal");
+  const magYawFixVal = $("magYawFixVal");
+  const magStableVal = $("magStableVal");
+  const hitPitchVal = $("hitPitchVal");
+  const hitYawVal = $("hitYawVal");
+  const hitRollVal = $("hitRollVal");
+  const hitPowerVal = $("hitPowerVal");
+  const hitFacePitchVal = $("hitFacePitchVal");
+  const hitFaceYawVal = $("hitFaceYawVal");
+  const hitPeakAccVal = $("hitPeakAccVal");
+  const hitImpulseVal = $("hitImpulseVal");
+  const hitPowerNormVal = $("hitPowerNormVal");
+  const hitPowerBoostVal = $("hitPowerBoostVal");
+  const vibrateHitEl = $("vibrateHit");
+
+  const BUF_MAX_MS = 1200;
+  const VIBRATE_STORAGE_KEY = "hit_webrtc_vibrate_hit";
+  const AUTO_YAW_PER_HIT_STORAGE_KEY = "hit_webrtc_auto_yaw_per_hit";
+  const YAW_CORRECTION_MODE_STORAGE_KEY = "hit_webrtc_yaw_correction_mode";
+  const FIXED_YAW_FIX_PER_HIT_STORAGE_KEY = "hit_webrtc_fixed_yaw_fix_per_hit";
+  const YAW_DRIFT_LEARN_MIN_HITS = 10;
+  const FORCE_PEAK_WINDOW_MS = 45;
+  const FORCE_PEAK_CLUSTER_MS = 18;
+  let ws = null;
+  let wsOpen = false;
+  let wsConnecting = false;
+  let wsReconnectTimer = null;
+  let wsShouldReconnect = false;
+  let wsConnectToken = 0;
+  const pendingHitPackets = [];
+  let wsLastAckAt = 0;
+  let wsLastEvent = "init";
+  let wsLastError = "";
+  let wsLastSendSeq = 0;
+  let wsRoomId = "";
+  const controllerClientId = `controller-${window.crypto && typeof window.crypto.randomUUID === "function" ? window.crypto.randomUUID() : String(Date.now())}`;
+  let lastHitTriggerAt = 0;
+  let hitSeq = 0;
+  let rtcPeer = null;
+  let rtcChannel = null;
+  let rtcConnecting = false;
+  let rtcOfferRetryTimer = null;
+  const RTC_CONFIG = {
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  };
+  let sensorsStarted = false;
+  let hasSensor = false;
+  let hasCal = false;
+  let magSensor = null;
+  let magAvailable = false;
+  let magActive = false;
+  let magLastError = "";
+  let magCalHeadingRad = null;
+  let magYawAssistOffsetRad = 0;
+  let magStableNow = false;
+  const autoYawLeftAngles = [];
+  const autoYawRightAngles = [];
+  let autoYawValidHitCount = 0;
+  let autoYawLastMessage = "";
+  let yawDriftHitCount = 0;
+  let lastYawBeforeCalibrationDeg = null;
+  let lastObservedYawBeforeCalibrationDeg = null;
+  let yawAppliedCorrectionRad = 0;
+  let yawDriftPerHitRad = 0;
+  let lastYawPerHitFixMessage = "";
+  const latestMag = { x: 0, y: 0, z: 0, t: 0, headingRad: null };
+  let absOrientationAvailable = false;
+  let absOrientationActive = false;
+  const latestAbsOrientation = { alpha: null, beta: null, gamma: null, t: 0, headingRad: null };
+  const latest = { alpha: 0, beta: 0, gamma: 0, absolute: false, amag: 0, gmag: 0 };
+  const motionBuf = [];
+  const qRaw = new THREE.Quaternion();
+  const qEst = new THREE.Quaternion();
+  const q0 = new THREE.Quaternion();
+  const q0Inv = new THREE.Quaternion();
+  let qHasInit = false;
+  const zee = new THREE.Vector3(0, 0, 1);
+  const euler = new THREE.Euler();
+  const q0screen = new THREE.Quaternion();
+  const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+  const qLockTmp = new THREE.Quaternion();
+  const qRelTmp = new THREE.Quaternion();
+  const gWorld = new THREE.Vector3(0, 0, 9.81);
+  const gDevice = new THREE.Vector3();
+  const invQtmp = new THREE.Quaternion();
+  const qSampleTmp = new THREE.Quaternion();
+  const qStartInvTmp = new THREE.Quaternion();
+  const aLin = new THREE.Vector3();
+  const aG = new THREE.Vector3();
+  const aWorld = new THREE.Vector3();
+  const aRelative = new THREE.Vector3();
+  const magDevice = new THREE.Vector3();
+  const magWorld = new THREE.Vector3();
+  const yawAssistQuat = new THREE.Quaternion();
+  const faceVec = new THREE.Vector3();
+  const faceQ = new THREE.Quaternion();
+  const CAL_STORAGE_KEY = "imu_world_cal_v1";
+
+  function fmt(v, d = 2) {
+    if (v == null || Number.isNaN(v)) return "-";
+    return Number(v).toFixed(d);
+  }
+  function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+  function angleDeltaRad(target, current) {
+    return Math.atan2(Math.sin(target - current), Math.cos(target - current));
+  }
+  function radToSignedDeg(rad) {
+    return THREE.MathUtils.radToDeg(Math.atan2(Math.sin(rad), Math.cos(rad)));
+  }
+  function uiStatus(lines) { statusEl.textContent = lines.join("\n"); }
+  function uiWsStatus(lines) { wsStatusEl.textContent = lines.join("\n"); }
+  function isHitVibrationEnabled() {
+    return !vibrateHitEl || vibrateHitEl.checked;
+  }
+  function vibrateHitCue() {
+    if (!isHitVibrationEnabled() || !navigator.vibrate) return;
+    try {
+      navigator.vibrate(28);
+    } catch (err) {}
+  }
+  function getReadyStateLabel(socket) {
+    if (!socket) return "NULL";
+    switch (socket.readyState) {
+      case WebSocket.CONNECTING: return "CONNECTING";
+      case WebSocket.OPEN: return "OPEN";
+      case WebSocket.CLOSING: return "CLOSING";
+      case WebSocket.CLOSED: return "CLOSED";
+      default: return String(socket.readyState);
+    }
+  }
+  function updateWsDebug() {
+    return;
+  }
+
+  function saveCalibration() {
+    try {
+      localStorage.setItem(CAL_STORAGE_KEY, JSON.stringify({
+        hasCal: !!hasCal,
+        q0: { x: q0.x, y: q0.y, z: q0.z, w: q0.w },
+        yawDriftPerHitRad,
+        lastYawBeforeCalibrationDeg,
+        lastObservedYawBeforeCalibrationDeg,
+        yawAppliedCorrectionRad
+      }));
+    } catch (err) {}
+  }
+
+  function restoreCalibration() {
+    try {
+      const raw = localStorage.getItem(CAL_STORAGE_KEY);
+      if (!raw) return false;
+      const saved = JSON.parse(raw);
+      if (!saved || !saved.hasCal || !saved.q0) return false;
+      q0.set(
+        Number(saved.q0.x || 0),
+        Number(saved.q0.y || 0),
+        Number(saved.q0.z || 0),
+        Number(saved.q0.w || 1)
+      ).normalize();
+      q0Inv.copy(q0).invert();
+      hasCal = true;
+      yawDriftPerHitRad = Number(saved.yawDriftPerHitRad) || 0;
+      lastYawBeforeCalibrationDeg = Number.isFinite(Number(saved.lastYawBeforeCalibrationDeg))
+        ? Number(saved.lastYawBeforeCalibrationDeg)
+        : null;
+      lastObservedYawBeforeCalibrationDeg = Number.isFinite(Number(saved.lastObservedYawBeforeCalibrationDeg))
+        ? Number(saved.lastObservedYawBeforeCalibrationDeg)
+        : null;
+      yawAppliedCorrectionRad = Number(saved.yawAppliedCorrectionRad) || 0;
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function reloadSavedCalibration() {
+    try {
+      const raw = localStorage.getItem(CAL_STORAGE_KEY);
+      if (!raw) return false;
+      const saved = JSON.parse(raw);
+      if (!saved || !saved.hasCal || !saved.q0) return false;
+      q0.set(
+        Number(saved.q0.x || 0),
+        Number(saved.q0.y || 0),
+        Number(saved.q0.z || 0),
+        Number(saved.q0.w || 1)
+      ).normalize();
+      q0Inv.copy(q0).invert();
+      hasCal = true;
+      yawDriftPerHitRad = Number(saved.yawDriftPerHitRad) || 0;
+      lastYawBeforeCalibrationDeg = Number.isFinite(Number(saved.lastYawBeforeCalibrationDeg))
+        ? Number(saved.lastYawBeforeCalibrationDeg)
+        : null;
+      lastObservedYawBeforeCalibrationDeg = Number.isFinite(Number(saved.lastObservedYawBeforeCalibrationDeg))
+        ? Number(saved.lastObservedYawBeforeCalibrationDeg)
+        : null;
+      yawAppliedCorrectionRad = Number(saved.yawAppliedCorrectionRad) || 0;
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function scheduleWsReconnect() {
+    if (!wsShouldReconnect || wsReconnectTimer) return;
+    wsLastEvent = "schedule_reconnect";
+    updateWsDebug();
+    wsReconnectTimer = setTimeout(() => {
+      wsReconnectTimer = null;
+      if (!wsOpen && !wsConnecting) connectWs(true);
+    }, 1200);
+  }
+
+  function enqueuePendingHitPacket(packet) {
+    pendingHitPackets.push(packet);
+    while (pendingHitPackets.length > 8) pendingHitPackets.shift();
+  }
+
+  function flushPendingHitPackets() {
+    if (!pendingHitPackets.length) return false;
+    if (!rtcChannel || rtcChannel.readyState !== "open") return false;
+    try {
+      while (pendingHitPackets.length) {
+        const packet = pendingHitPackets[0];
+        rtcChannel.send(JSON.stringify(packet));
+        pendingHitPackets.shift();
+        wsLastSendSeq = packet.seq || 0;
+        wsLastEvent = "flush_queue";
+        updateWsDebug();
+        uiWsStatus([
+          `WebRTC connected`,
+          `sent queued hit seq=${packet.seq}`,
+          `dir=${getDirectionLabel(packet.accel_dir)}`,
+          `peak_acc=${fmt(packet.features.peak_acc, 1)}`
+        ]);
+      }
+      return true;
+    } catch (err) {
+      wsLastError = String(err?.message || err);
+      wsLastEvent = "flush_failed";
+      updateWsDebug();
+      ensureWsConnection("retry");
+      return false;
+    }
+  }
+
+  function sendSignal(packet) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    try {
+      ws.send(JSON.stringify({
+        ...packet,
+        roomId: wsRoomId,
+        channelId: wsRoomId,
+        sourceClientId: controllerClientId,
+        targetRole: "simulator",
+        role: "controller-webrtc",
+        device: "mobile-hit-webrtc",
+        t_client: Date.now()
+      }));
+      return true;
+    } catch (err) {
+      wsLastError = String(err?.message || err);
+      return false;
+    }
+  }
+
+  function closeRtc() {
+    if (rtcOfferRetryTimer) {
+      clearTimeout(rtcOfferRetryTimer);
+      rtcOfferRetryTimer = null;
+    }
+    if (rtcChannel) {
+      try { rtcChannel.close(); } catch (err) {}
+      rtcChannel = null;
+    }
+    if (rtcPeer) {
+      try { rtcPeer.close(); } catch (err) {}
+      rtcPeer = null;
+    }
+    rtcConnecting = false;
+  }
+
+  function scheduleRtcOfferRetry() {
+    if (rtcOfferRetryTimer) return;
+    rtcOfferRetryTimer = setTimeout(() => {
+      rtcOfferRetryTimer = null;
+      if (wsOpen && (!rtcChannel || rtcChannel.readyState !== "open")) {
+        startRtcOffer();
+      }
+    }, 2200);
+  }
+
+  function setupRtcChannel(channel) {
+    rtcChannel = channel;
+    rtcChannel.addEventListener("open", () => {
+      if (rtcOfferRetryTimer) {
+        clearTimeout(rtcOfferRetryTimer);
+        rtcOfferRetryTimer = null;
+      }
+      rtcConnecting = false;
+      wsLastEvent = "rtc_open";
+      updateWsDebug();
+      uiWsStatus([`WebRTC connected`, `DataChannel open`]);
+      flushPendingHitPackets();
+    });
+    rtcChannel.addEventListener("close", () => {
+      wsLastEvent = "rtc_close";
+      updateWsDebug();
+      uiWsStatus([`WebRTC closed`, `Reconnect signaling to rebuild`]);
+      scheduleRtcOfferRetry();
+    });
+    rtcChannel.addEventListener("error", () => {
+      wsLastEvent = "rtc_error";
+      updateWsDebug();
+      uiWsStatus([`WebRTC error`, `Reconnect signaling to rebuild`]);
+    });
+  }
+
+  async function startRtcOffer() {
+    if (!ws || ws.readyState !== WebSocket.OPEN || rtcConnecting) return;
+    closeRtc();
+    rtcConnecting = true;
+    rtcPeer = new RTCPeerConnection(RTC_CONFIG);
+    rtcPeer.addEventListener("icecandidate", (event) => {
+      if (event.candidate) sendSignal({ type: "webrtc-ice", candidate: event.candidate });
+    });
+    rtcPeer.addEventListener("connectionstatechange", () => {
+      const state = rtcPeer ? rtcPeer.connectionState : "closed";
+      wsLastEvent = `rtc_${state}`;
+      updateWsDebug();
+      uiWsStatus([`Signaling connected`, `WebRTC ${state}`]);
+      if (state === "failed" || state === "disconnected" || state === "closed") {
+        rtcConnecting = false;
+      }
+    });
+    setupRtcChannel(rtcPeer.createDataChannel("hit", {
+      ordered: false,
+      maxRetransmits: 0
+    }));
+    const offer = await rtcPeer.createOffer();
+    await rtcPeer.setLocalDescription(offer);
+    sendSignal({ type: "webrtc-offer", sdp: rtcPeer.localDescription });
+    uiWsStatus([`Signaling connected`, `WebRTC offer sent`]);
+    scheduleRtcOfferRetry();
+  }
+
+  async function handleRtcSignal(packet) {
+    if (!packet || !packet.type) return false;
+    try {
+      if (packet.type === "webrtc-answer" && rtcPeer) {
+        await rtcPeer.setRemoteDescription(packet.sdp);
+        wsLastEvent = "rtc_answer";
+        updateWsDebug();
+        uiWsStatus([`Signaling connected`, `WebRTC answer received`]);
+        return true;
+      }
+      if (packet.type === "webrtc-ice" && rtcPeer && packet.candidate) {
+        await rtcPeer.addIceCandidate(packet.candidate);
+        return true;
+      }
+    } catch (err) {
+      wsLastError = String(err?.message || err);
+      wsLastEvent = "rtc_signal_failed";
+      updateWsDebug();
+      uiWsStatus([`WebRTC signal failed`, wsLastError]);
+      return true;
+    }
+    return false;
+  }
+
+  function ensureWsConnection(reason = "retry") {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+    connectWs(reason === "retry");
+  }
+
+  function getPendingSeqLabel(packet) {
+    return `queued seq=${packet.seq}`;
+  }
+
+  function flushPendingHitPacket() {
+    return flushPendingHitPackets();
+  }
+
+  function getScreenOrientRad() {
+    const ang = (screen.orientation && typeof screen.orientation.angle === "number")
+      ? screen.orientation.angle
+      : (typeof window.orientation === "number" ? window.orientation : 0);
+    return THREE.MathUtils.degToRad(ang || 0);
+  }
+
+  function setQuaternionFromDeviceOrientation(outQ, alphaDeg, betaDeg, gammaDeg) {
+    const alpha = THREE.MathUtils.degToRad(alphaDeg || 0);
+    const beta = THREE.MathUtils.degToRad(betaDeg || 0);
+    const gamma = THREE.MathUtils.degToRad(gammaDeg || 0);
+    const orient = getScreenOrientRad();
+    euler.set(beta, alpha, -gamma, "YXZ");
+    outQ.setFromEuler(euler);
+    outQ.multiply(q1);
+    outQ.multiply(q0screen.setFromAxisAngle(zee, -orient));
+    outQ.normalize();
+    return outQ;
+  }
+
+  function getYawAssistedQuaternion(sourceQ) {
+    qLockTmp.copy(sourceQ).normalize();
+    if (Math.abs(magYawAssistOffsetRad) < 0.000001) return qLockTmp;
+    yawAssistQuat.setFromAxisAngle(zee, magYawAssistOffsetRad);
+    qLockTmp.premultiply(yawAssistQuat).normalize();
+    return qLockTmp;
+  }
+
+  function smoothQuaternion(outQ, targetQ, t) {
+    outQ.slerp(targetQ, t);
+    outQ.normalize();
+    return outQ;
+  }
+
+  function getDirectionLabel(v) {
+    const parts = [];
+    if (v.y > 0.35) parts.push("Forward");
+    else if (v.y < -0.35) parts.push("Backward");
+    if (v.x > 0.35) parts.push("Right");
+    else if (v.x < -0.35) parts.push("Left");
+    if (v.z > 0.35) parts.push("Up");
+    else if (v.z < -0.35) parts.push("Down");
+    return parts.length ? parts.join(" + ") : "Neutral";
+  }
+
+  function isMagYawAssistEnabled() {
+    return !!magYawAssistEl && magYawAssistEl.checked;
+  }
+
+  function getTiltCompensatedMagHeading(qSource = qRaw) {
+    if (!magActive || !Number.isFinite(latestMag.x) || !Number.isFinite(latestMag.y) || !Number.isFinite(latestMag.z)) return null;
+    magDevice.set(latestMag.x, latestMag.y, latestMag.z);
+    if (magDevice.length() < 0.000001) return null;
+    magWorld.copy(magDevice).applyQuaternion(qSource).normalize();
+    const horizontal = Math.hypot(magWorld.x, magWorld.y);
+    if (horizontal < 0.000001) return null;
+    return Math.atan2(magWorld.x, magWorld.y);
+  }
+
+  function getAbsoluteOrientationHeading() {
+    if (!absOrientationActive || !Number.isFinite(latestAbsOrientation.alpha)) return null;
+    return THREE.MathUtils.degToRad(latestAbsOrientation.alpha);
+  }
+
+  function getYawAssistHeading(qSource = qRaw) {
+    const magHeading = getTiltCompensatedMagHeading(qSource);
+    if (Number.isFinite(magHeading)) return { heading: magHeading, source: "MAG", t: latestMag.t || 0 };
+    const absHeading = getAbsoluteOrientationHeading();
+    if (Number.isFinite(absHeading)) return { heading: null, displayHeading: absHeading, source: "ABS", t: latestAbsOrientation.t || 0 };
+    return { heading: null, source: magLastError ? "ERR" : "NO", t: 0 };
+  }
+
+  function updateMagYawAssist() {
+    if (!isMagYawAssistEnabled() || !hasCal || !qHasInit) {
+      magStableNow = false;
+      return;
+    }
+    const headingInfo = getYawAssistHeading(qRaw);
+    const heading = headingInfo.heading;
+    if (headingInfo.source === "MAG") latestMag.headingRad = heading;
+    if (headingInfo.source === "ABS") latestAbsOrientation.headingRad = heading;
+    if (!Number.isFinite(heading)) {
+      magStableNow = false;
+      return;
+    }
+    if (!Number.isFinite(magCalHeadingRad)) {
+      magCalHeadingRad = heading;
+      return;
+    }
+    const isStill = latest.amag < 0.75 && latest.gmag < 8;
+    const freshHeading = performance.now() - (headingInfo.t || 0) < 700;
+    magStableNow = isStill && freshHeading;
+    if (!magStableNow) return;
+
+    const yawError = angleDeltaRad(magCalHeadingRad, heading + magYawAssistOffsetRad);
+    if (Math.abs(yawError) > THREE.MathUtils.degToRad(35)) return;
+    magYawAssistOffsetRad += yawError * 0.018;
+    magYawAssistOffsetRad = clamp(magYawAssistOffsetRad, -THREE.MathUtils.degToRad(28), THREE.MathUtils.degToRad(28));
+  }
+
+  function resetAutoYawSamples() {
+    autoYawLeftAngles.length = 0;
+    autoYawRightAngles.length = 0;
+    autoYawValidHitCount = 0;
+    autoYawLastMessage = "";
+  }
+
+  function getRelativeYawDegForQuaternion(qSource, qInv = q0Inv) {
+    if (!qSource) return 0;
+    const qTmp = new THREE.Quaternion().copy(qSource).normalize();
+    qTmp.premultiply(qInv).normalize();
+    return quatToEulerDeg(qTmp).yaw;
+  }
+
+  function applyAutoYawCalibrationStep(stepRad, referenceQ = qRaw) {
+    if (!Number.isFinite(stepRad) || Math.abs(stepRad) < 0.000001) return;
+    const qRef = new THREE.Quaternion().copy(referenceQ || qRaw).normalize();
+    const qRel = new THREE.Quaternion().copy(qRef).premultiply(q0Inv).normalize();
+    const relEuler = new THREE.Euler().setFromQuaternion(qRel, "YXZ");
+    relEuler.y += stepRad;
+    const qDesiredRel = new THREE.Quaternion().setFromEuler(relEuler).normalize();
+    q0.copy(qRef).multiply(qDesiredRel.invert()).normalize();
+    q0Inv.copy(q0).invert();
+    saveCalibration();
+  }
+
+  function getYawCorrectionMode() {
+    return yawCorrectionModeEl && yawCorrectionModeEl.value === "fixed" ? "fixed" : "auto";
+  }
+
+  function getFixedYawFixPerHitRad() {
+    const deg = clamp(Number(fixedYawFixPerHitEl?.value) || 0, -3, 3);
+    return THREE.MathUtils.degToRad(deg);
+  }
+
+  function getYawFixPerHitRad() {
+    return getYawCorrectionMode() === "fixed" ? getFixedYawFixPerHitRad() : -yawDriftPerHitRad;
+  }
+
+  function updateYawPerHitDiagnostics() {
+    if (yawHitCountVal) yawHitCountVal.textContent = String(Math.max(0, yawDriftHitCount));
+    if (yawBeforeCalVal) yawBeforeCalVal.textContent = Number.isFinite(lastYawBeforeCalibrationDeg) ? fmt(lastYawBeforeCalibrationDeg, 1) : "-";
+    if (yawDriftPerHitVal) yawDriftPerHitVal.textContent = Math.abs(yawDriftPerHitRad) > 0.000001 ? fmt(radToSignedDeg(yawDriftPerHitRad), 2) : "-";
+    const fixRad = getYawFixPerHitRad();
+    if (yawFixPerHitVal) yawFixPerHitVal.textContent = Math.abs(fixRad) > 0.000001 ? fmt(radToSignedDeg(fixRad), 2) : "-";
+  }
+
+  function learnYawDriftPerHitFromCalibration(observedYawBeforeDeg, hitCount) {
+    lastObservedYawBeforeCalibrationDeg = Number.isFinite(observedYawBeforeDeg) ? observedYawBeforeDeg : null;
+    if (!Number.isFinite(observedYawBeforeDeg) || hitCount <= 0) return null;
+    const appliedCorrectionDeg = radToSignedDeg(yawAppliedCorrectionRad);
+    const estimatedUncorrectedYawDeg = observedYawBeforeDeg - appliedCorrectionDeg;
+    lastYawBeforeCalibrationDeg = estimatedUncorrectedYawDeg;
+    if (getYawCorrectionMode() === "fixed") {
+      saveCalibration();
+      return {
+        fixedMode: true,
+        hitCount,
+        observedYawBeforeDeg,
+        appliedCorrectionDeg,
+        estimatedUncorrectedYawDeg
+      };
+    }
+    if (hitCount < YAW_DRIFT_LEARN_MIN_HITS) {
+      saveCalibration();
+      return {
+        skipped: true,
+        hitCount,
+        observedYawBeforeDeg,
+        appliedCorrectionDeg,
+        estimatedUncorrectedYawDeg,
+        minHits: YAW_DRIFT_LEARN_MIN_HITS
+      };
+    }
+    const driftPerHitDeg = estimatedUncorrectedYawDeg / Math.max(1, hitCount);
+    const clampedDriftDeg = clamp(driftPerHitDeg, -3, 3);
+    yawDriftPerHitRad = THREE.MathUtils.degToRad(clampedDriftDeg);
+    saveCalibration();
+    return {
+      hitCount,
+      observedYawBeforeDeg,
+      appliedCorrectionDeg,
+      estimatedUncorrectedYawDeg,
+      driftPerHitDeg,
+      clampedDriftDeg,
+      fixPerHitDeg: -clampedDriftDeg
+    };
+  }
+
+  function applyYawPerHitCorrection() {
+    if (!autoYawPerHitEl || !autoYawPerHitEl.checked) return null;
+    const fixRad = getYawFixPerHitRad();
+    if (!hasCal || !qHasInit || Math.abs(fixRad) < THREE.MathUtils.degToRad(0.02)) return null;
+    const stepRad = clamp(fixRad, -THREE.MathUtils.degToRad(3), THREE.MathUtils.degToRad(3));
+    const before = getRelativeOrientationDiagnostics().angle.yaw;
+    applyAutoYawCalibrationStep(stepRad);
+    yawAppliedCorrectionRad += stepRad;
+    saveCalibration();
+    const after = getRelativeOrientationDiagnostics().angle.yaw;
+    lastYawPerHitFixMessage = `Per-hit yaw ${getYawCorrectionMode()} fix ${fmt(radToSignedDeg(stepRad), 2)} deg | rel ${fmt(before, 1)} -> ${fmt(after, 1)}`;
+    return lastYawPerHitFixMessage;
+  }
+
+  function pushLimitedAngleSample(list, angleRad, limit = 6) {
+    list.push(angleRad);
+    while (list.length > limit) list.shift();
+  }
+
+  function circularMeanRad(values) {
+    if (!values || !values.length) return 0;
+    let sx = 0;
+    let sy = 0;
+    for (const value of values) {
+      sx += Math.cos(value);
+      sy += Math.sin(value);
+    }
+    if (Math.hypot(sx, sy) < 0.000001) return 0;
+    return Math.atan2(sy, sx);
+  }
+
+  function getHitDirXYAngleDeg(accelDir) {
+    if (!accelDir || !Number.isFinite(accelDir.x) || !Number.isFinite(accelDir.y)) return null;
+    return radToSignedDeg(Math.atan2(accelDir.x, accelDir.y));
+  }
+
+  function maybeUpdateAutoYawCorrection(accelDir, displayPower) {
+    return null;
+    const hitDirZ = Number(accelDir?.z);
+    const powerBoost = Number(displayPower?.powerBoost);
+    if (!accelDir || !Number.isFinite(hitDirZ) || !Number.isFinite(powerBoost)) return null;
+    if (hitDirZ <= -0.08 || powerBoost <= 0.22 || !Number.isFinite(accelDir.x) || accelDir.x === 0) return null;
+
+    // Use the hit acceleration vector only: X decides left/right, Z filters downward smashes.
+    const angle = THREE.MathUtils.degToRad(getHitDirXYAngleDeg(accelDir));
+    if (accelDir.x < 0) pushLimitedAngleSample(autoYawLeftAngles, angle);
+    else pushLimitedAngleSample(autoYawRightAngles, angle);
+    autoYawValidHitCount += 1;
+
+    if (autoYawLeftAngles.length < 6 || autoYawRightAngles.length < 6) {
+      return null;
+    }
+
+    const leftAvg = circularMeanRad(autoYawLeftAngles);
+    const rightAvg = circularMeanRad(autoYawRightAngles);
+    const centerBias = circularMeanRad([leftAvg, rightAvg]);
+    const step = clamp(centerBias * 0.85, -THREE.MathUtils.degToRad(7), THREE.MathUtils.degToRad(7));
+    if (Math.abs(step) < THREE.MathUtils.degToRad(0.15)) return null;
+
+    const yawBefore = getRelativeOrientationDiagnostics().angle.yaw;
+    applyAutoYawCalibrationStep(step);
+    const yawAfter = getRelativeOrientationDiagnostics().angle.yaw;
+    autoYawLastMessage = `Auto yaw rel fix ${fmt(radToSignedDeg(step), 2)} deg | yaw ${fmt(yawBefore, 1)} -> ${fmt(yawAfter, 1)} | accel L=${fmt(radToSignedDeg(leftAvg), 1)} R=${fmt(radToSignedDeg(rightAvg), 1)}`;
+    return autoYawLastMessage;
+  }
+
+  function getRelativeOrientationDiagnostics() {
+    if (!qHasInit) {
+      return {
+        face: { x: 0, y: 0, z: -1 },
+        angle: { pitch: 0, yaw: 0, roll: 0 },
+        driftDeg: 0
+      };
+    }
+    const face = getCalibratedFaceNormal(qRaw);
+    const angle = getFaceAngleDeg(qRaw);
+    qRelTmp.copy(qRaw).normalize();
+    if (hasCal) qRelTmp.premultiply(q0Inv).normalize();
+    const driftDeg = THREE.MathUtils.radToDeg(2 * Math.acos(clamp(Math.abs(qRelTmp.w), 0, 1)));
+    return { face, angle, driftDeg };
+  }
+
+  function updateLivePills() {
+    const liveDir = motionBuf.length ? toCalibratedWorldDirection(getGestureWorldDirection(motionBuf, performance.now())) : null;
+    if (liveDir) {
+      pitchVal.textContent = fmt(liveDir.x, 2);
+      yawVal.textContent = fmt(liveDir.y, 2);
+      rollVal.textContent = fmt(liveDir.z, 2);
+    } else {
+      pitchVal.textContent = "-";
+      yawVal.textContent = "-";
+      rollVal.textContent = "-";
+    }
+    accVal.textContent = fmt(latest.amag, 1);
+    const diag = getRelativeOrientationDiagnostics();
+    calStateVal.textContent = hasCal ? "ON" : "OFF";
+    relPitchVal.textContent = fmt(diag.angle.pitch, 1);
+    relYawVal.textContent = fmt(diag.angle.yaw, 1);
+    relRollVal.textContent = fmt(diag.angle.roll, 1);
+    faceXVal.textContent = fmt(diag.face.x, 2);
+    faceYVal.textContent = fmt(diag.face.y, 2);
+    faceZVal.textContent = fmt(diag.face.z, 2);
+    driftVal.textContent = fmt(diag.driftDeg, 1);
+    const headingInfo = getYawAssistHeading(qRaw);
+    const headingRad = Number.isFinite(headingInfo.heading) ? headingInfo.heading : headingInfo.displayHeading;
+    magStateVal.textContent = headingInfo.source === "MAG"
+      ? "MAG"
+      : (headingInfo.source === "ABS" ? "ABS" : (magLastError ? "ERR" : ((magAvailable || absOrientationAvailable) ? "READY" : "NO")));
+    magHeadingVal.textContent = Number.isFinite(headingRad) ? fmt(radToSignedDeg(headingRad), 1) : "-";
+    magYawFixVal.textContent = fmt(radToSignedDeg(magYawAssistOffsetRad), 1);
+    magStableVal.textContent = magStableNow ? "YES" : "NO";
+    updateYawPerHitDiagnostics();
+  }
+
+  function pushMotionSample(sample) {
+    motionBuf.push(sample);
+    const cutoff = sample.t - BUF_MAX_MS;
+    while (motionBuf.length && motionBuf[0].t < cutoff) motionBuf.shift();
+  }
+
+  function sliceWindow(t0, preMs, postMs) {
+    const from = t0 - preMs;
+    const to = t0 + postMs;
+    return motionBuf.filter((s) => s.t >= from && s.t <= to);
+  }
+
+  function getGestureWorldDirection(samples, t0) {
+    const gestureWindow = samples.filter((s) => (s.t || 0) >= (t0 - 180) && (s.t || 0) <= (t0 + 40));
+    if (!gestureWindow.length) {
+      return { x: 0, y: 0, z: 0, mag: 0, peakMag: 0, sampleCount: 0, usedCount: 0 };
+    }
+
+    let peakIndex = 0;
+    let peakMag = 0;
+    for (let i = 0; i < gestureWindow.length; i += 1) {
+      const mag = gestureWindow[i].wmag || 0;
+      if (mag > peakMag) {
+        peakMag = mag;
+        peakIndex = i;
+      }
+    }
+
+    const enterThreshold = Math.max(1.1, peakMag * 0.28);
+    const segments = [];
+    let segStart = -1;
+    let segPeak = 0;
+    for (let i = 0; i < gestureWindow.length; i += 1) {
+      const mag = gestureWindow[i].wmag || 0;
+      if (mag >= enterThreshold) {
+        if (segStart < 0) {
+          segStart = i;
+          segPeak = mag;
+        } else {
+          segPeak = Math.max(segPeak, mag);
+        }
+      } else if (segStart >= 0) {
+        segments.push({ start: segStart, end: i - 1, peak: segPeak });
+        segStart = -1;
+        segPeak = 0;
+      }
+    }
+    if (segStart >= 0) segments.push({ start: segStart, end: gestureWindow.length - 1, peak: segPeak });
+
+    const strongSegments = segments.filter((seg) => seg.peak >= Math.max(enterThreshold, peakMag * 0.36));
+    const chosenSegment = strongSegments.length
+      ? strongSegments[strongSegments.length - 1]
+      : segments[segments.length - 1];
+    if (!chosenSegment) {
+      return {
+        x: 0, y: 0, z: 0, mag: 0,
+        peakMag, sampleCount: gestureWindow.length, usedCount: 0
+      };
+    }
+    const leadSegment = gestureWindow.slice(chosenSegment.start, chosenSegment.end + 1);
+
+    let sx = 0;
+    let sy = 0;
+    let sz = 0;
+    let weightSum = 0;
+
+    for (const s of leadSegment) {
+      const mag = Math.max(0.0001, s.wmag || 0);
+      const gyroMag = Math.max(0, s.gmag || 0);
+      const rotationPenalty = 1 / (1 + Math.pow(gyroMag / 170, 1.5) * 3.2);
+      const translationBias = clamp(mag / Math.max(0.25, mag + (gyroMag * 0.012)), 0.12, 1);
+      const weight = Math.pow(mag, 1.6) * rotationPenalty * translationBias;
+      sx += (s.wx || 0) * weight;
+      sy += (s.wy || 0) * weight;
+      sz += (s.wz || 0) * weight;
+      weightSum += weight;
+    }
+
+    if (weightSum < 0.000001) {
+      return {
+        x: 0, y: 0, z: 0, mag: 0,
+        peakMag, sampleCount: gestureWindow.length, usedCount: leadSegment.length
+      };
+    }
+
+    const nx = sx / weightSum;
+    const ny = sy / weightSum;
+    const nz = sz / weightSum;
+    const norm = Math.hypot(nx, ny, nz);
+    if (norm < 0.000001) {
+      return {
+        x: 0, y: 0, z: 0, mag: 0,
+        peakMag, sampleCount: gestureWindow.length, usedCount: leadSegment.length
+      };
+    }
+
+    return {
+      x: nx / norm,
+      y: ny / norm,
+      z: nz / norm,
+      mag: norm,
+      peakMag,
+      sampleCount: gestureWindow.length,
+      usedCount: leadSegment.length
+    };
+  }
+
+  function getGestureStartRelativeDirection(samples, t0, qStart) {
+    if (!qStart || !samples || !samples.length) {
+      return toCalibratedWorldDirection(getGestureWorldDirection(samples, t0));
+    }
+    const gestureWindow = samples.filter((s) => (s.t || 0) >= (t0 - 180) && (s.t || 0) <= (t0 + 40));
+    if (!gestureWindow.length) {
+      return { x: 0, y: 0, z: 0, mag: 0, peakMag: 0, sampleCount: 0, usedCount: 0, relativeFrame: true };
+    }
+
+    let peakMag = 0;
+    for (const sample of gestureWindow) peakMag = Math.max(peakMag, sample.amag || sample.wmag || 0);
+
+    const enterThreshold = Math.max(1.1, peakMag * 0.28);
+    const segments = [];
+    let segStart = -1;
+    let segPeak = 0;
+    for (let i = 0; i < gestureWindow.length; i += 1) {
+      const mag = gestureWindow[i].amag || gestureWindow[i].wmag || 0;
+      if (mag >= enterThreshold) {
+        if (segStart < 0) {
+          segStart = i;
+          segPeak = mag;
+        } else {
+          segPeak = Math.max(segPeak, mag);
+        }
+      } else if (segStart >= 0) {
+        segments.push({ start: segStart, end: i - 1, peak: segPeak });
+        segStart = -1;
+        segPeak = 0;
+      }
+    }
+    if (segStart >= 0) segments.push({ start: segStart, end: gestureWindow.length - 1, peak: segPeak });
+
+    const strongSegments = segments.filter((seg) => seg.peak >= Math.max(enterThreshold, peakMag * 0.36));
+    const chosenSegment = strongSegments.length
+      ? strongSegments[strongSegments.length - 1]
+      : segments[segments.length - 1];
+    if (!chosenSegment) {
+      return { x: 0, y: 0, z: 0, mag: 0, peakMag, sampleCount: gestureWindow.length, usedCount: 0, relativeFrame: true };
+    }
+
+    qStartInvTmp.copy(qStart).normalize().invert();
+    const leadSegment = gestureWindow.slice(chosenSegment.start, chosenSegment.end + 1);
+    let sx = 0;
+    let sy = 0;
+    let sz = 0;
+    let weightSum = 0;
+    let usedCount = 0;
+
+    for (const s of leadSegment) {
+      const hasSampleQuat = [s.qx, s.qy, s.qz, s.qw].every(Number.isFinite);
+      if (!hasSampleQuat) continue;
+      qSampleTmp.set(s.qx, s.qy, s.qz, s.qw).normalize();
+      aRelative.set(s.ax || 0, s.ay || 0, s.az || 0)
+        .applyQuaternion(qSampleTmp)
+        .applyQuaternion(qStartInvTmp);
+
+      const mag = Math.max(0.0001, aRelative.length());
+      const gyroMag = Math.max(0, s.gmag || 0);
+      const rotationPenalty = 1 / (1 + Math.pow(gyroMag / 170, 1.5) * 3.2);
+      const translationBias = clamp(mag / Math.max(0.25, mag + (gyroMag * 0.012)), 0.12, 1);
+      const weight = Math.pow(mag, 1.6) * rotationPenalty * translationBias;
+      sx += aRelative.x * weight;
+      sy += aRelative.y * weight;
+      sz += aRelative.z * weight;
+      weightSum += weight;
+      usedCount += 1;
+    }
+
+    if (weightSum < 0.000001 || usedCount <= 0) {
+      return toCalibratedWorldDirection(getGestureWorldDirection(samples, t0));
+    }
+
+    const nx = sx / weightSum;
+    const ny = sy / weightSum;
+    const nz = sz / weightSum;
+    const norm = Math.hypot(nx, ny, nz);
+    if (norm < 0.000001) {
+      return { x: 0, y: 0, z: 0, mag: 0, peakMag, sampleCount: gestureWindow.length, usedCount, relativeFrame: true };
+    }
+
+    return {
+      x: nx / norm,
+      y: ny / norm,
+      z: nz / norm,
+      mag: norm,
+      peakMag,
+      sampleCount: gestureWindow.length,
+      usedCount,
+      relativeFrame: true
+    };
+  }
+
+  function toCalibratedWorldDirection(worldDir) {
+    if (!worldDir || worldDir.mag < 0.000001) {
+      return { x: 0, y: 0, z: 0, mag: 0, peakMag: 0, sampleCount: 0, usedCount: 0 };
+    }
+    if (!hasCal) return worldDir;
+    const v = new THREE.Vector3(worldDir.x, worldDir.y, worldDir.z);
+    v.applyQuaternion(q0Inv).normalize();
+    return {
+      x: v.x,
+      y: v.y,
+      z: v.z,
+      mag: 1,
+      peakMag: worldDir.peakMag || 0,
+      sampleCount: worldDir.sampleCount || 0,
+      usedCount: worldDir.usedCount || 0
+    };
+  }
+
+  function getCalibratedFaceNormal(qSource = null) {
+    if (!qHasInit && !qSource) return { x: 0, y: 0, z: -1 };
+    faceQ.copy(qSource || qEst);
+    // The phone "hitting face" is the screen/front side, which points along local -Z.
+    faceVec.set(0, 0, -1).applyQuaternion(faceQ).normalize();
+    if (hasCal) faceVec.applyQuaternion(q0Inv).normalize();
+    return { x: faceVec.x, y: faceVec.y, z: faceVec.z };
+  }
+
+  function quatToEulerDeg(q) {
+    const eu = new THREE.Euler().setFromQuaternion(q, "YXZ");
+    return {
+      pitchX: THREE.MathUtils.radToDeg(eu.x),
+      yawY: THREE.MathUtils.radToDeg(eu.y),
+      rollZ: THREE.MathUtils.radToDeg(eu.z)
+    };
+  }
+
+  function computeLinearAcceleration(evAcc, evAccG, qForGravity) {
+    if (evAcc && evAcc.x != null && evAcc.y != null && evAcc.z != null) {
+      aLin.set(evAcc.x, evAcc.y, evAcc.z);
+      return aLin;
+    }
+    if (evAccG && evAccG.x != null && evAccG.y != null && evAccG.z != null) {
+      aG.set(evAccG.x, evAccG.y, evAccG.z);
+      invQtmp.copy(qForGravity).invert();
+      gDevice.copy(gWorld).applyQuaternion(invQtmp);
+      aLin.copy(aG).sub(gDevice);
+      return aLin;
+    }
+    aLin.set(0, 0, 0);
+    return aLin;
+  }
+
+  function computeForceFeatures(samples) {
+    if (!samples || samples.length < 2) return { peakA: 0, rmsA: 0, impulseProxy: 0, peakGyro: 0, dt: 0.016 };
+    let peakA = 0, sum2 = 0, sumAbs = 0, peakGyro = 0, dtSum = 0, dtN = 0;
+    for (let i = 0; i < samples.length; i += 1) {
+      const a = samples[i].amag || 0;
+      peakA = Math.max(peakA, a);
+      sum2 += a * a;
+      sumAbs += a;
+      peakGyro = Math.max(peakGyro, samples[i].gmag || 0);
+      if (i > 0) {
+        const dt = (samples[i].t - samples[i - 1].t) / 1000;
+        if (dt > 0) { dtSum += dt; dtN += 1; }
+      }
+    }
+    const dtAvg = dtN > 0 ? (dtSum / dtN) : 0.016;
+    const meff = Math.max(0.01, Number(meffEl.value || 0.2));
+    return {
+      peakA,
+      rmsA: Math.sqrt(sum2 / samples.length),
+      impulseProxy: sumAbs * dtAvg * meff,
+      peakGyro,
+      dt: dtAvg
+    };
+  }
+
+  function computeLocalPeakForceFeatures(t0) {
+    const beforeWindow = motionBuf.filter((s) => (s.t || 0) >= (t0 - 80) && (s.t || 0) <= (t0 - 10));
+    const afterWindow = motionBuf.filter((s) => (s.t || 0) >= t0 && (s.t || 0) <= (t0 + FORCE_PEAK_WINDOW_MS));
+    const peakWindow = afterWindow.length ? afterWindow : motionBuf.filter((s) => Math.abs((s.t || 0) - t0) <= FORCE_PEAK_WINDOW_MS);
+    if (!peakWindow.length) return computeForceFeatures([]);
+
+    let peakSample = peakWindow[0];
+    for (const sample of peakWindow) {
+      if ((sample.amag || 0) > (peakSample.amag || 0)) peakSample = sample;
+    }
+    let beforePeak = 0;
+    for (const sample of beforeWindow) beforePeak = Math.max(beforePeak, sample.amag || 0);
+    const afterPeak = peakSample.amag || 0;
+    const residueRatio = beforePeak > 0.0001 ? afterPeak / beforePeak : 999;
+    const sharpDropResidue = beforePeak >= 12 && residueRatio < 0.62;
+    const strongAfterPeak = afterPeak >= 14 && residueRatio >= 0.72;
+    const residueScale = sharpDropResidue
+      ? Math.min(0.29, 0.18 + (residueRatio * 0.18))
+      : ((strongAfterPeak || residueRatio >= 0.85)
+          ? 1
+          : clamp(0.42 + (residueRatio * 0.34), 0.42, 1));
+
+    const peakT = peakSample.t || t0;
+    const cluster = peakWindow.filter((s) => Math.abs((s.t || 0) - peakT) <= FORCE_PEAK_CLUSTER_MS);
+    const usable = cluster.length ? cluster : [peakSample];
+    const base = computeForceFeatures(usable);
+    const peakGyro = usable.reduce((max, s) => Math.max(max, s.gmag || 0), 0);
+    const scaledPeak = afterPeak * residueScale;
+    const localImpulseProxy = scaledPeak * 0.085;
+    return {
+      peakA: scaledPeak,
+      rmsA: base.rmsA * residueScale,
+      impulseProxy: localImpulseProxy,
+      peakGyro,
+      dt: base.dt,
+      sampleCount: usable.length,
+      residueScale
+    };
+  }
+
+  function computeSwingDir(samples) {
+    let sx = 0, sy = 0, sz = 0;
+    for (const s of samples) {
+      const w = Math.max(0, s.amag || 0);
+      sx += (s.wx || 0) * w;
+      sy += (s.wy || 0) * w;
+      sz += (s.wz || 0) * w;
+    }
+    const n = Math.hypot(sx, sy, sz);
+    if (n < 0.0001) return { x: 0, y: 1, z: 0 };
+    return { x: sx / n, y: sy / n, z: sz / n };
+  }
+
+  function makeHitPacket(t0, accelDir, feats, samples, qSource = null, seq = null) {
+    const swing = computeSwingDir(samples);
+    const faceNormal = getCalibratedFaceNormal(qSource);
+    const faceAngle = getFaceAngleDeg(qSource);
+    return {
+      type: "hit",
+      t_client: Date.now(),
+      t_capture_ms: Math.round(t0),
+      seq: seq ?? ++hitSeq,
+      euler_deg: { pitch: 0, yaw: 0, roll: 0 },
+      aim_deg: { pitch: 0, yaw: 0 },
+      accel_dir: {
+        x: Number(accelDir.x.toFixed(4)),
+        y: Number(accelDir.y.toFixed(4)),
+        z: Number(accelDir.z.toFixed(4))
+      },
+      face_normal: {
+        x: Number(faceNormal.x.toFixed(4)),
+        y: Number(faceNormal.y.toFixed(4)),
+        z: Number(faceNormal.z.toFixed(4))
+      },
+      face_angle_deg: {
+        pitch: Number(faceAngle.pitch.toFixed(2)),
+        yaw: Number(faceAngle.yaw.toFixed(2)),
+        roll: Number(faceAngle.roll.toFixed(2))
+      },
+      face_pitch_deg: Number(faceAngle.pitch.toFixed(2)),
+      face_yaw_deg: Number(faceAngle.yaw.toFixed(2)),
+      face_roll_deg: Number(faceAngle.roll.toFixed(2)),
+      swing_dir: { x: Number(swing.x.toFixed(4)), y: Number(swing.y.toFixed(4)), z: Number(swing.z.toFixed(4)) },
+      features: {
+        peak_acc: Number(feats.peakA.toFixed(3)),
+        rms_acc: Number(feats.rmsA.toFixed(3)),
+        impulse_proxy: Number(feats.impulseProxy.toFixed(4)),
+        peak_gyro: Number(feats.peakGyro.toFixed(3))
+      },
+      quality: {
+        sample_count: samples.length,
+        used_count: accelDir.usedCount || 0,
+        dt_avg_ms: Number((feats.dt * 1000).toFixed(2))
+      }
+    };
+  }
+
+  function computeDisplayPower(features) {
+    const peakAccNorm = clamp((((features.peak_acc || 0) - 8) / 30), 0, 1);
+    const impulseNorm = clamp((((features.impulse_proxy || 0) - 0.55) / 2.60), 0, 1);
+    const gyroNorm = clamp((((features.peak_gyro || 0) - 130) / 760), 0, 1);
+    const rawPower = clamp((peakAccNorm * 0.50) + (impulseNorm * 0.30) + (gyroNorm * 0.20), 0, 1);
+    const powerNorm = Math.pow(rawPower, 1.22);
+    const powerBoost = powerNorm;
+    return { powerNorm, powerBoost };
+  }
+
+  function getFaceAngleDeg(qSource = null) {
+    if (!qHasInit && !qSource) {
+      return { pitch: 0, yaw: 0, roll: 0 };
+    }
+    qLockTmp.copy(qSource || qEst).normalize();
+    qRelTmp.copy(qLockTmp);
+    if (hasCal) qRelTmp.premultiply(q0Inv).normalize();
+    const e = quatToEulerDeg(qRelTmp);
+    return {
+      pitch: e.pitchX,
+      yaw: e.yawY,
+      roll: e.rollZ
+    };
+  }
+
+  function sendHitPacket(packet) {
+    if (!rtcChannel || rtcChannel.readyState !== "open") {
+      enqueuePendingHitPacket(packet);
+      wsLastSendSeq = packet.seq || 0;
+      wsLastEvent = "queue_hit";
+      updateWsDebug();
+      uiWsStatus([`WebRTC not connected`, getPendingSeqLabel(packet), `Connecting...`]);
+      ensureWsConnection("retry");
+      return;
+    }
+    try {
+      rtcChannel.send(JSON.stringify(packet));
+      wsLastSendSeq = packet.seq || 0;
+      wsLastEvent = "send_hit";
+      wsLastError = "";
+      updateWsDebug();
+    } catch (err) {
+      enqueuePendingHitPacket(packet);
+      wsLastSendSeq = packet.seq || 0;
+      wsLastEvent = "send_failed";
+      wsLastError = String(err?.message || err);
+      updateWsDebug();
+      uiWsStatus([`WebRTC send failed`, getPendingSeqLabel(packet), `Retrying...`]);
+      ensureWsConnection("retry");
+      return;
+    }
+    uiWsStatus([
+      `WebRTC connected`,
+      `sent hit seq=${packet.seq}`,
+      `dir=${getDirectionLabel(packet.accel_dir)}`,
+      `peak_acc=${fmt(packet.features.peak_acc, 1)}`
+    ]);
+  }
+
+  function sendPrepareHitPacket(seq) {
+    if (!rtcChannel || rtcChannel.readyState !== "open") return false;
+    try {
+      rtcChannel.send(JSON.stringify({ type: "prepare_hit", seq }));
+      wsLastSendSeq = seq || 0;
+      wsLastEvent = "send_prepare_hit";
+      updateWsDebug();
+      return true;
+    } catch (err) {
+      wsLastError = String(err?.message || err);
+      wsLastEvent = "prepare_send_failed";
+      updateWsDebug();
+      return false;
+    }
+  }
+
+  function sendSpecialActivatePacket() {
+    const seq = ++hitSeq;
+    const packet = {
+      type: "special_activate",
+      seq,
+      t_client: Date.now()
+    };
+    if (!rtcChannel || rtcChannel.readyState !== "open") {
+      wsLastSendSeq = seq;
+      wsLastEvent = "special_queue_failed";
+      updateWsDebug();
+      uiWsStatus([`WebRTC not connected`, `special not sent`, `Connecting...`]);
+      ensureWsConnection("retry");
+      return false;
+    }
+    try {
+      rtcChannel.send(JSON.stringify(packet));
+      wsLastSendSeq = seq;
+      wsLastEvent = "send_special_activate";
+      wsLastError = "";
+      updateWsDebug();
+      uiWsStatus([`WebRTC connected`, `special request sent seq=${seq}`]);
+      return true;
+    } catch (err) {
+      wsLastSendSeq = seq;
+      wsLastEvent = "special_send_failed";
+      wsLastError = String(err?.message || err);
+      updateWsDebug();
+      uiWsStatus([`Special send failed`, `Retrying...`]);
+      ensureWsConnection("retry");
+      return false;
+    }
+  }
+
+  function sendPlayerReadyPacket() {
+    const seq = ++hitSeq;
+    const packet = {
+      type: "player_ready",
+      seq,
+      t_client: Date.now()
+    };
+    if (!rtcChannel || rtcChannel.readyState !== "open") {
+      wsLastSendSeq = seq;
+      wsLastEvent = "ready_send_failed";
+      updateWsDebug();
+      uiWsStatus([`WebRTC not connected`, `ready not sent`, `Connecting...`]);
+      ensureWsConnection("retry");
+      return false;
+    }
+    try {
+      rtcChannel.send(JSON.stringify(packet));
+      wsLastSendSeq = seq;
+      wsLastEvent = "send_player_ready";
+      wsLastError = "";
+      updateWsDebug();
+      uiWsStatus([`WebRTC connected`, `ready sent seq=${seq}`]);
+      return true;
+    } catch (err) {
+      wsLastSendSeq = seq;
+      wsLastEvent = "ready_send_failed";
+      wsLastError = String(err?.message || err);
+      updateWsDebug();
+      uiWsStatus([`Ready send failed`, `Retrying...`]);
+      ensureWsConnection("retry");
+      return false;
+    }
+  }
+
+  async function startMagnetometerIfNeeded() {
+    magAvailable = typeof window.Magnetometer === "function";
+    if (!isMagYawAssistEnabled() || magSensor || !magAvailable) {
+      updateLivePills();
+      return false;
+    }
+    try {
+      magSensor = new window.Magnetometer({ frequency: 30 });
+      magSensor.addEventListener("reading", () => {
+        latestMag.x = Number(magSensor.x);
+        latestMag.y = Number(magSensor.y);
+        latestMag.z = Number(magSensor.z);
+        latestMag.t = performance.now();
+        latestMag.headingRad = getTiltCompensatedMagHeading(qRaw);
+        magActive = true;
+        magLastError = "";
+        updateMagYawAssist();
+        updateLivePills();
+      });
+      magSensor.addEventListener("error", (event) => {
+        magActive = false;
+        magLastError = String(event?.error?.message || event?.error || "Magnetometer error");
+        updateLivePills();
+      });
+      magSensor.start();
+      magActive = true;
+      magLastError = "";
+      updateLivePills();
+      return true;
+    } catch (err) {
+      magSensor = null;
+      magActive = false;
+      magLastError = String(err?.message || err);
+      updateLivePills();
+      return false;
+    }
+  }
+
+  function handleAbsoluteOrientation(event) {
+    absOrientationAvailable = true;
+    latestAbsOrientation.alpha = event.alpha ?? null;
+    latestAbsOrientation.beta = event.beta ?? null;
+    latestAbsOrientation.gamma = event.gamma ?? null;
+    latestAbsOrientation.t = performance.now();
+    latestAbsOrientation.headingRad = getAbsoluteOrientationHeading();
+    absOrientationActive = Number.isFinite(latestAbsOrientation.alpha);
+    updateMagYawAssist();
+    updateLivePills();
+  }
+
+  function handleOrientation(event) {
+    latest.alpha = event.alpha ?? 0;
+    latest.beta = event.beta ?? 0;
+    latest.gamma = event.gamma ?? 0;
+    latest.absolute = !!event.absolute;
+    setQuaternionFromDeviceOrientation(qRaw, latest.alpha, latest.beta, latest.gamma);
+    if (!qHasInit) {
+      qEst.copy(qRaw);
+      qHasInit = true;
+    } else {
+      smoothQuaternion(qEst, qRaw, 0.18);
+    }
+    hasSensor = true;
+    updateMagYawAssist();
+    updateLivePills();
+  }
+
+  function handleMotion(event) {
+    const now = performance.now();
+    const acc = event.acceleration || {};
+    const accG = event.accelerationIncludingGravity || {};
+    const rot = event.rotationRate || {};
+    const qUse = qHasInit ? qRaw : qEst;
+    const lin = computeLinearAcceleration(acc, accG, qUse);
+    const ax = lin.x;
+    const ay = lin.y;
+    const az = lin.z;
+    latest.amag = Math.hypot(ax, ay, az);
+    latest.gmag = Math.hypot(rot.alpha || 0, rot.beta || 0, rot.gamma || 0);
+    const qWorldUse = getYawAssistedQuaternion(qUse);
+    aWorld.copy(lin).applyQuaternion(qWorldUse);
+    updateMagYawAssist();
+    pushMotionSample({
+      t: now,
+      ax, ay, az,
+      amag: latest.amag,
+      gmag: latest.gmag,
+      wx: aWorld.x,
+      wy: aWorld.y,
+      wz: aWorld.z,
+      wmag: Math.hypot(aWorld.x, aWorld.y, aWorld.z),
+      qx: qWorldUse.x,
+      qy: qWorldUse.y,
+      qz: qWorldUse.z,
+      qw: qWorldUse.w
+    });
+    updateLivePills();
+  }
+
+  async function requestPermissionIfNeeded() {
+    if (typeof DeviceOrientationEvent?.requestPermission === "function") {
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res !== "granted") throw new Error("Orientation permission denied");
+    }
+    if (typeof DeviceMotionEvent?.requestPermission === "function") {
+      const res = await DeviceMotionEvent.requestPermission();
+      if (res !== "granted") throw new Error("Motion permission denied");
+    }
+  }
+
+  function connectWs(isRetry = false) {
+    const url = String(wsUrlEl.value || "").trim();
+    if (!url) return uiWsStatus([`WS URL is empty`]);
+    wsRoomId = String(roomIdEl.value || "").trim();
+    if (!wsRoomId) return uiWsStatus([`Channel ID is empty`, `Scan QRCode from simulator first`]);
+    if (ws && ws.readyState === WebSocket.CONNECTING) {
+      wsLastEvent = "connect_skip_connecting";
+      updateWsDebug();
+      uiWsStatus([`Signaling connecting`, url, `room=${wsRoomId}`]);
+      return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN && wsOpen) {
+      wsLastEvent = "connect_skip_open";
+      updateWsDebug();
+      uiWsStatus([`Signaling connected`, url, `room=${wsRoomId}`, rtcChannel?.readyState === "open" ? `WebRTC connected` : `Starting WebRTC...`]);
+      startRtcOffer();
+      flushPendingHitPackets();
+      return;
+    }
+    const token = ++wsConnectToken;
+    wsShouldReconnect = true;
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = null;
+    }
+    if (ws) {
+      try { ws.close(); } catch (e) {}
+      ws = null;
+    }
+    wsOpen = false;
+    wsConnecting = true;
+    wsLastEvent = isRetry ? "reconnect_start" : "connect_start";
+    wsLastError = "";
+    updateWsDebug();
+    closeRtc();
+    uiWsStatus([isRetry ? `Reconnecting signaling` : `Connecting signaling`, url, `room=${wsRoomId}`]);
+    ws = new WebSocket(url);
+    const socket = ws;
+    socket.addEventListener("open", () => {
+      if (socket !== ws || token !== wsConnectToken) return;
+      wsOpen = true;
+      wsConnecting = false;
+      wsLastEvent = "open";
+      updateWsDebug();
+      localStorage.setItem("imu_ws_url", url);
+      localStorage.setItem("imu_ws_room_id", wsRoomId);
+      uiWsStatus([`Signaling connected`, url, `room=${wsRoomId}`, `Starting WebRTC...`]);
+      socket.send(JSON.stringify({
+        type: "hello",
+        role: "controller-webrtc",
+        device: "mobile-hit-webrtc",
+        roomId: wsRoomId,
+        channelId: wsRoomId,
+        clientId: controllerClientId,
+        t_client: Date.now()
+      }));
+      startRtcOffer();
+    });
+    socket.addEventListener("close", () => {
+      if (socket !== ws || token !== wsConnectToken) return;
+      wsOpen = false;
+      wsConnecting = false;
+      ws = null;
+      wsLastEvent = "close";
+      updateWsDebug();
+      uiWsStatus([`Signaling disconnected`, url, `room=${wsRoomId}`, `Retrying...`]);
+      scheduleWsReconnect();
+    });
+    socket.addEventListener("error", () => {
+      if (socket !== ws || token !== wsConnectToken) return;
+      wsOpen = false;
+      wsConnecting = false;
+      wsLastEvent = "error";
+      wsLastError = "socket error";
+      updateWsDebug();
+      try { socket.close(); } catch (e) {}
+      uiWsStatus([`Signaling error`, url, `room=${wsRoomId}`, `Retrying...`]);
+      scheduleWsReconnect();
+    });
+    socket.addEventListener("message", async (event) => {
+      if (socket !== ws || token !== wsConnectToken) return;
+      try {
+        const packet = JSON.parse(event.data);
+        if (packet && packet.roomId && packet.roomId !== wsRoomId) return;
+        if (packet && packet.targetClientId && packet.targetClientId !== controllerClientId) return;
+        if ((packet.sourceRole || packet.role) === "controller-webrtc") return;
+        if (await handleRtcSignal(packet)) return;
+        if (packet && packet.type === "hello_ack") {
+          wsOpen = true;
+          wsConnecting = false;
+          wsLastAckAt = Date.now();
+          wsLastEvent = "hello_ack";
+          updateWsDebug();
+          startRtcOffer();
+        }
+      } catch (err) {}
+    });
+  }
+
+  btnWs.addEventListener("click", connectWs);
+
+  btnStart.addEventListener("click", async () => {
+    try {
+      if (!window.isSecureContext) return uiStatus([`Secure context required`, `Open via HTTPS or localhost`]);
+      await requestPermissionIfNeeded();
+      if (!sensorsStarted) {
+        window.addEventListener("deviceorientation", handleOrientation, { passive: true });
+        window.addEventListener("deviceorientationabsolute", handleAbsoluteOrientation, { passive: true });
+        window.addEventListener("devicemotion", handleMotion, { passive: true });
+        sensorsStarted = true;
+      }
+      await startMagnetometerIfNeeded();
+      btnCal.disabled = false;
+      btnHit.disabled = false;
+      btnSpecial.disabled = false;
+      btnYawMinus.disabled = false;
+      btnYawPlus.disabled = false;
+      uiStatus([`Sensors enabled`, `Move phone and check world Dir X/Y/Z.`]);
+    } catch (err) {
+      uiStatus([`Start failed`, String(err?.message || err)]);
+    }
+  });
+
+  btnCal.addEventListener("click", () => {
+    if (!hasSensor) return uiStatus([`No orientation data yet`, `Move the phone and try again.`]);
+    if (!qHasInit) return uiStatus([`No orientation pose yet`, `Move the phone and try again.`]);
+    const yawBeforeDeg = hasCal ? getRelativeOrientationDiagnostics().angle.yaw : 0;
+    const driftLearned = learnYawDriftPerHitFromCalibration(yawBeforeDeg, yawDriftHitCount);
+    q0.copy(qRaw).normalize();
+    q0Inv.copy(q0).invert();
+    hasCal = true;
+    magCalHeadingRad = getYawAssistHeading(qRaw).heading;
+    magYawAssistOffsetRad = 0;
+    yawDriftHitCount = 0;
+    yawAppliedCorrectionRad = 0;
+    resetAutoYawSamples();
+    saveCalibration();
+    const readySent = sendPlayerReadyPacket();
+    uiStatus([
+      `Ready / calibration complete`,
+      `World swing direction now aligns to this neutral pose.`,
+      driftLearned
+        ? (driftLearned.fixedMode
+          ? `Yaw drift raw ${fmt(driftLearned.estimatedUncorrectedYawDeg, 1)} deg / ${driftLearned.hitCount} hits, fixed mode`
+          : driftLearned.skipped
+          ? `Yaw drift raw ${fmt(driftLearned.estimatedUncorrectedYawDeg, 1)} deg / ${driftLearned.hitCount} hits, keep previous fix`
+          : `Yaw drift raw ${fmt(driftLearned.estimatedUncorrectedYawDeg, 1)} deg / ${driftLearned.hitCount} hits = ${fmt(driftLearned.clampedDriftDeg, 2)} deg per hit`)
+        : `Yaw drift waiting for hit count`,
+      driftLearned
+        ? `Observed ${fmt(driftLearned.observedYawBeforeDeg, 1)} deg, applied ${fmt(driftLearned.appliedCorrectionDeg, 1)} deg${driftLearned.skipped ? `, need ${driftLearned.minHits}+ hits` : ``}`
+        : `Observed yaw ${fmt(yawBeforeDeg, 1)} deg`,
+      `Per-hit correction ${fmt(radToSignedDeg(getYawFixPerHitRad()), 2)} deg`,
+      readySent ? `Ready packet sent` : `Ready packet not sent`
+    ]);
+    updateLivePills();
+  });
+
+  async function handleHitTrigger(triggerType) {
+    try {
+      const now = performance.now();
+      if (now - lastHitTriggerAt < 180) return;
+      lastHitTriggerAt = now;
+      wsLastEvent = `hit_trigger_${triggerType}`;
+      updateWsDebug();
+      vibrateHitCue();
+      if (!hasSensor) return uiStatus([`No orientation data yet`]);
+      reloadSavedCalibration();
+      const preMs = Number(preMsEl.value || 150);
+      const postMs = Number(postMsEl.value || 30);
+      const t0 = performance.now();
+      const seq = ++hitSeq;
+      const qLock = new THREE.Quaternion().copy(qRaw).normalize();
+      sendPrepareHitPacket(seq);
+      uiStatus([`Capturing...`, `pre=${preMs} post=${postMs}`]);
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, postMs) + 5));
+
+      const samples = sliceWindow(t0, preMs, postMs);
+      const feats = computeLocalPeakForceFeatures(t0);
+      const accelDir = toCalibratedWorldDirection(getGestureWorldDirection(samples, t0));
+      const packet = makeHitPacket(t0, accelDir, feats, samples, qLock, seq);
+
+      hitPitchVal.textContent = fmt(packet.accel_dir.x, 2);
+      hitYawVal.textContent = fmt(packet.accel_dir.y, 2);
+      hitRollVal.textContent = fmt(packet.accel_dir.z, 2);
+      hitPowerVal.textContent = fmt(packet.features.peak_acc, 1);
+      const faceAngle = packet.face_angle_deg || getFaceAngleDeg(qLock);
+      hitFacePitchVal.textContent = fmt(faceAngle.pitch, 1);
+      hitFaceYawVal.textContent = fmt(faceAngle.yaw, 1);
+      hitPeakAccVal.textContent = fmt(packet.features.peak_acc, 1);
+      hitImpulseVal.textContent = fmt(packet.features.impulse_proxy, 2);
+      const displayPower = computeDisplayPower(packet.features);
+      const autoYawMessage = maybeUpdateAutoYawCorrection(accelDir, displayPower);
+      const hitDirXYAngle = getHitDirXYAngleDeg(accelDir);
+      hitPowerNormVal.textContent = fmt(displayPower.powerNorm, 2);
+      hitPowerBoostVal.textContent = fmt(displayPower.powerBoost, 2);
+
+      sendHitPacket(packet);
+      yawDriftHitCount += 1;
+      const perHitYawMessage = applyYawPerHitCorrection();
+      updateLivePills();
+      uiStatus([
+        `Capture complete`,
+        `samples=${samples.length} force=${feats.sampleCount ?? '-'} used=${packet.quality.used_count ?? '-'}`,
+        `dir=${getDirectionLabel(packet.accel_dir)}`,
+        `xy_angle=${hitDirXYAngle == null ? '-' : fmt(hitDirXYAngle, 1)} deg | x=${fmt(packet.accel_dir.x, 2)} y=${fmt(packet.accel_dir.y, 2)}`,
+        `peak_acc=${fmt(packet.features.peak_acc, 2)}`,
+        perHitYawMessage || autoYawMessage || autoYawLastMessage || lastYawPerHitFixMessage || `Per-hit yaw waiting hits=${yawDriftHitCount}`
+      ]);
+    } catch (err) {
+      wsLastEvent = "hit_handler_failed";
+      wsLastError = String(err?.message || err);
+      updateWsDebug();
+      uiStatus([`Hit failed`, String(err?.message || err)]);
+    }
+  }
+
+  btnHit.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    handleHitTrigger("pointerdown");
+  });
+  btnHit.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+  });
+  btnSpecial.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    sendSpecialActivatePacket();
+  });
+  btnSpecial.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+  });
+  function applyManualYawTest(deltaDeg) {
+    if (!hasCal || !qHasInit) return uiStatus([`Yaw test unavailable`, `Calibrate first.`]);
+    const before = getRelativeOrientationDiagnostics().angle.yaw;
+    applyAutoYawCalibrationStep(THREE.MathUtils.degToRad(deltaDeg));
+    const after = getRelativeOrientationDiagnostics().angle.yaw;
+    updateLivePills();
+    uiStatus([`Manual yaw test ${deltaDeg > 0 ? '+' : ''}${fmt(deltaDeg, 1)} deg`, `Rel Yaw ${fmt(before, 1)} -> ${fmt(after, 1)}`]);
+  }
+  btnYawMinus.addEventListener("click", () => applyManualYawTest(-1));
+  btnYawPlus.addEventListener("click", () => applyManualYawTest(1));
+  if (magYawAssistEl) {
+    magAvailable = typeof window.Magnetometer === "function";
+    magYawAssistEl.addEventListener("change", () => {
+      magYawAssistOffsetRad = 0;
+      magCalHeadingRad = getYawAssistHeading(qRaw).heading;
+      if (magYawAssistEl.checked) startMagnetometerIfNeeded();
+      updateLivePills();
+    });
+  }
+
+  const savedVibrateHit = localStorage.getItem(VIBRATE_STORAGE_KEY);
+  if (savedVibrateHit != null) vibrateHitEl.checked = savedVibrateHit !== "0";
+  vibrateHitEl.addEventListener("change", () => {
+    localStorage.setItem(VIBRATE_STORAGE_KEY, vibrateHitEl.checked ? "1" : "0");
+  });
+  const savedAutoYawPerHit = localStorage.getItem(AUTO_YAW_PER_HIT_STORAGE_KEY);
+  if (autoYawPerHitEl && savedAutoYawPerHit != null) autoYawPerHitEl.checked = savedAutoYawPerHit !== "0";
+  if (autoYawPerHitEl) {
+    autoYawPerHitEl.addEventListener("change", () => {
+      localStorage.setItem(AUTO_YAW_PER_HIT_STORAGE_KEY, autoYawPerHitEl.checked ? "1" : "0");
+      updateLivePills();
+    });
+  }
+  const savedYawCorrectionMode = localStorage.getItem(YAW_CORRECTION_MODE_STORAGE_KEY);
+  if (yawCorrectionModeEl && (savedYawCorrectionMode === "auto" || savedYawCorrectionMode === "fixed")) {
+    yawCorrectionModeEl.value = savedYawCorrectionMode;
+  }
+  const savedFixedYawFixPerHit = localStorage.getItem(FIXED_YAW_FIX_PER_HIT_STORAGE_KEY);
+  if (fixedYawFixPerHitEl && savedFixedYawFixPerHit != null && Number.isFinite(Number(savedFixedYawFixPerHit))) {
+    fixedYawFixPerHitEl.value = String(clamp(Number(savedFixedYawFixPerHit), -3, 3));
+  }
+  if (yawCorrectionModeEl) {
+    yawCorrectionModeEl.addEventListener("change", () => {
+      localStorage.setItem(YAW_CORRECTION_MODE_STORAGE_KEY, getYawCorrectionMode());
+      updateLivePills();
+    });
+  }
+  if (fixedYawFixPerHitEl) {
+    fixedYawFixPerHitEl.addEventListener("input", () => {
+      const fixedDeg = clamp(Number(fixedYawFixPerHitEl.value) || 0, -3, 3);
+      localStorage.setItem(FIXED_YAW_FIX_PER_HIT_STORAGE_KEY, String(fixedDeg));
+      updateLivePills();
+    });
+    fixedYawFixPerHitEl.addEventListener("change", () => {
+      const fixedDeg = clamp(Number(fixedYawFixPerHitEl.value) || 0, -3, 3);
+      fixedYawFixPerHitEl.value = String(fixedDeg);
+      localStorage.setItem(FIXED_YAW_FIX_PER_HIT_STORAGE_KEY, String(fixedDeg));
+      updateLivePills();
+    });
+  }
+
+  const pageParams = new URLSearchParams(window.location.search);
+  const wsFromUrl = pageParams.get("ws");
+  const roomFromUrl = pageParams.get("room") || pageParams.get("channel");
+  const savedWsUrl = localStorage.getItem("imu_ws_url");
+  const savedRoomId = localStorage.getItem("imu_ws_room_id");
+  function getDefaultWsUrl() {
+    const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${scheme}//${window.location.host}/ws`;
+  }
+  if (wsFromUrl) {
+    wsUrlEl.value = wsFromUrl;
+  } else if (savedWsUrl) {
+    wsUrlEl.value = savedWsUrl;
+  } else {
+    wsUrlEl.value = getDefaultWsUrl();
+  }
+  if (roomFromUrl) {
+    roomIdEl.value = roomFromUrl;
+  } else if (savedRoomId) {
+    roomIdEl.value = savedRoomId;
+  }
+  roomIdEl.addEventListener("input", () => {
+    localStorage.setItem("imu_ws_room_id", String(roomIdEl.value || "").trim());
+  });
+  const restoredCal = restoreCalibration();
+  updateWsDebug();
+  uiStatus(
+    restoredCal
+      ? [`Ready`, `Stored calibration restored`, `1. Enable sensors`, `2. Connect WebRTC`, `3. Tap hit`]
+      : [`Ready`, `1. Enable sensors`, `2. Calibrate (optional)`, `3. Connect WebRTC`, `4. Tap hit`]
+  );
+</script>
+</body>
+</html>
